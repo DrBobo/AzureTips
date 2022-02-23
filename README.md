@@ -14,4 +14,4 @@ In my daily work with customers and partners, I encounter many specific (strange
 | Title | Podcast Link |
 | ------------------------------------------- | :---------- |
 | **Azure Storage** |
-| [Resize the Azure Disk (Managed Disks)](https://github.com/roboban/AzureTips/tree/main/Tip001) | https://youtu.be/Q8f2vTLB-gk?t=659 |
+| [Resize the Azure Disk (Managed Disks)](https://github.com/DrBobo/AzureTips/tree/main/Tip001) | https://youtu.be/Q8f2vTLB-gk?t=659 |
