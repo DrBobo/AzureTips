@@ -36,5 +36,7 @@ Creating new Managed Disks from the snapshots and copying all orginal disk setti
 
 Step 4.
 Create new VM, and then attach old NIC resource(s) and attach all new disks!
+
 📢Note: The current script implementation doesn't copy all VM settings from old VM to the new VM!
+
 📢Note: By creating a new VM, the VM gets a new VM ID! Some software vendors use the VM ID as the HW key to generate software licenses. Check your software vendor documentation and follow the instructions to reactivate the licenses.
