@@ -194,7 +194,7 @@ if (-Not $Subscription) {
 # If not exists - Create new Resource Group for Disk Snapshots
 # -------------------------------------------------------------
 
-$rt_Target = Get-AzResourceGroup -$rg_Target_Name -Location $location
+$rt_Target = Get-AzResourceGroup -Name $rg_Target_Name -Location $location
 
 if ($null -eq $rt_Target) {
 	$rt_Target = New-AzResourceGroup -Name $rg_Target_Name -Location $location
@@ -250,7 +250,7 @@ $vm_Target = New-AzVMConfig -VMName $vm_Source.Name -VMSize $vm_Source.HardwareP
 # -------------------------------------------------------------------
 # Create new disks from the snapshots 
 # -------------------------------------------------------------------
-$disks.Clear()
+
 $disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $rg_Target_Name -ResourceGroupTarget $rg_Source_Name -SnapshotsInfo $snapshotInfo
 
 # ---------------------------------------------------------------------------------
@@ -259,22 +259,14 @@ $disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $rg_T
 
 $vm_Target = Add-DiskToVirtualMachine -VMConfig $vm_Target -Disks $disks
 
-
-	$disk = $disks[2]
-	$vm_Target = Add-AzVMDataDisk -VM $vm_Target -Name $disk.Name -DiskSizeInGB $disk.DiskSizeGB -ManagedDiskId $disk.Id -CreateOption Attach -Lun $disk.Tags["DiskLun"] 
-	$vm_Target.StorageProfile.DataDisks
-
-
-
 # ---------------------------------------------------------------------------------
 # Add the NICs to the VM
 # ---------------------------------------------------------------------------------
 
 $vm_Target = Add-NICsToVirtualMAchine -vm_source $vm_source -vm_target $vm_Target
 
+# ---------------------------------------------------------------------------------
 # Recreate the VM
-New-AzVM -ResourceGroupName $rg_Source_Name -Location $vm_source.Location -VM $vm_Target 
+# ---------------------------------------------------------------------------------
+New-AzVM -ResourceGroupName $rg_Source_Name -Location $vm_source.Location -VM $vm_Target -AsJob
 	
-
-
-
