@@ -26,10 +26,10 @@ The steps I'm describing here are also reflected in the powershell script and pr
 Check the [list](https://docs.microsoft.com/en-us/azure/availability-zones/az-region) of  Azure services that support Availability Zones!
 
 Step 1.
-Stop and delocate the Virtual Machine! 
+Get the details from the VM to be moved out of Availability Zone
 
 Step 2. 
-First you need to move all VM disks from Availability Zones! We will first make a snapshot of all disks on the VM! The disk snapshots are created in Target ResourceGroup. If you want to clean Target ResourceGroup later you have to do it yourself. Currently script is not doing that!
+Move all VM disks from Availability Zones! We will first make a snapshot of all disks on the VM! The disk snapshots are created in Target ResourceGroup. If you want to clean Target ResourceGroup later you have to do it yourself. Currently script is not doing that!
 
 Step 3.
 Creating new Managed Disks from the snapshots and copying all orginal disk settings back to thew newly created Managed Disks.

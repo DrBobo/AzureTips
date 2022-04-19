@@ -1,4 +1,28 @@
-﻿# ------------------------------------------------------
+﻿param (
+	#--------------------------------------------------------------
+	# essential parameters
+	#--------------------------------------------------------------
+	# parameter is always mandatory
+	[Parameter(Mandatory=$True)]
+	[int] $stepIndex,
+
+	[Parameter(Mandatory=$True)]
+	[string] $subscriptionName,
+
+	[Parameter(Mandatory=$True)]
+	[string] $location,
+	 
+	[Parameter(Mandatory=$True)]
+	[string] $sourceRG,
+	 
+	[Parameter(Mandatory=$True)]
+	[string] $targetRG,
+	 
+	[Parameter(Mandatory=$True)]
+	[string] $sourceVM	
+)
+
+# ------------------------------------------------------
 # Remove VMs from Availability Zone
 # ------------------------------------------------------
 
@@ -168,14 +192,6 @@ Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $Virtua
 #     BEFORE EXECUTING THIS SCRIPT PLEASE BACKUP YOUR VIRTUAL MACHINE
 # --------------------------------------------------------------------------
 
-$subscriptionName 	= 'Education Subscription'
-$location 			= 'West Europe'
-
-$rg_Source_Name 	= 'rg-azdemo'
-$rg_Target_Name 	= 'rg-NewSnap'
-
-$vm_Source_Name 	= 'vmDemoVM001'
-
 # ------------------------------------------------------
 # Running in the right Subscription?
 # ------------------------------------------------------
@@ -194,79 +210,86 @@ if (-Not $Subscription) {
 # If not exists - Create new Resource Group for Disk Snapshots
 # -------------------------------------------------------------
 
-$rt_Target = Get-AzResourceGroup -Name $rg_Target_Name -Location $location
-
-if ($null -eq $rt_Target) {
-	$rt_Target = New-AzResourceGroup -Name $rg_Target_Name -Location $location
+try {
+	$rt_Target = Get-AzResourceGroup -Name $targetRG -Location $location
+} catch {
 }
 
-# ----------------------------------------------------------------
-# Get the details from the VM to be moved out of Availability Zone
-# ----------------------------------------------------------------
+if ($null -eq $rt_Target) {
+	$rt_Target = New-AzResourceGroup -Name $targetRG -Location $location
+}
 
-$vm_source = Get-AzVM -ResourceGroupName $rg_Source_Name -Name $vm_Source_Name
+try {
 
-# ----------------------------------------------------------------------------------
-# Create all VM disks snapshot in target Resouce Group ($rg_Target_Name)
-# 
-# Note: This func will collect information from the orginal disk settings
-# and copy them in the disk snapshot tags! 
-# Please be sure that all req. disk settings are copied over to the snapshot tags. 
-# Based on that information the new disks will be created
-#
-# Return: $snapshotInfo - list of the Azure Snapshot Resource names
-# ----------------------------------------------------------------------------------
+	# ----------------------------------------------------------------
+	# Get the details from the VM to be moved out of Availability Zone
+	# ----------------------------------------------------------------
 
-$snapshotInfo = Write-VMDisksSnapshot -ResourceGroup $rg_Target_Name -VirtualMachine $vm_source
+	$vm_source = Get-AzVM -ResourceGroupName $sourceRG -Name $sourceVM
 
-# -------------------------------------------------------------------
-# Delete Source VM 
-#
-# Note: All disks marked >Delete with VM< will be also removed
-# -------------------------------------------------------------------
-Remove-AzVM -ResourceGroupName $rg_Source_Name -Name $vm_Source_Name -Force   
+	# ----------------------------------------------------------------------------------
+	# Create all VM disks snapshot in target Resouce Group ($targetRG)
+	# 
+	# Note: This func will collect information from the orginal disk settings
+	# and copy them in the disk snapshot tags! 
+	# Please be sure that all req. disk settings are copied over to the snapshot tags. 
+	# Based on that information the new disks will be created
+	#
+	# Return: $snapshotInfo - list of the Azure Snapshot Resource names
+	# ----------------------------------------------------------------------------------
 
-# -------------------------------------------------------------------
-# Delete other resources...
-#
-# Note: Please remove disks (if they are not already removed)
-# -------------------------------------------------------------------
+	$snapshotInfo = Write-VMDisksSnapshot -ResourceGroup $targetRG -VirtualMachine $vm_source
 
-# ... your >Delete other resources...< script is going to be... here!
-# e.g. Remove old disks...
+	# -------------------------------------------------------------------
+	# Delete Source VM 
+	#
+	# Note: All disks marked >Delete with VM< will be also removed
+	# -------------------------------------------------------------------
+	Remove-AzVM -ResourceGroupName $sourceRG -Name $sourceVM -Force   
 
-Remove-AllVirualMachineDisks -ResourceGroup $rg_Source_Name -VirtualMachine $vm_source
+	# -------------------------------------------------------------------
+	# Delete other resources...
+	#
+	# Note: Please remove disks (if they are not already removed)
+	# -------------------------------------------------------------------
 
-# ----------------------------------------------------------------------------------------------
-# CREATE Virtual Machine (VM) 
-#
-# Note: In this example not all VM properties are copied over from old to the new VM!
-# Please implement an additional mapping if necessery
-# ----------------------------------------------------------------------------------------------
+	# ... your >Delete other resources...< script is going to be... here!
+	# e.g. Remove old disks...
 
-#Initialize virtual machine configuration
-$vm_Target = New-AzVMConfig -VMName $vm_Source.Name -VMSize $vm_Source.HardwareProfile.VmSize -LicenseType $vm_Source.LicenseType
+	Remove-AllVirualMachineDisks -ResourceGroup $sourceRG -VirtualMachine $vm_source
 
-# -------------------------------------------------------------------
-# Create new disks from the snapshots 
-# -------------------------------------------------------------------
+	# ----------------------------------------------------------------------------------------------
+	# CREATE Virtual Machine (VM) 
+	#
+	# Note: In this example not all VM properties are copied over from old to the new VM!
+	# Please implement an additional mapping if necessery
+	# ----------------------------------------------------------------------------------------------
 
-$disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $rg_Target_Name -ResourceGroupTarget $rg_Source_Name -SnapshotsInfo $snapshotInfo
+	#Initialize virtual machine configuration
+	$vm_Target = New-AzVMConfig -VMName $vm_Source.Name -VMSize $vm_Source.HardwareProfile.VmSize -LicenseType $vm_Source.LicenseType
 
-# ---------------------------------------------------------------------------------
-# Add the Disks to the VM
-# ---------------------------------------------------------------------------------
+	# -------------------------------------------------------------------
+	# Create new disks from the snapshots 
+	# -------------------------------------------------------------------
 
-$vm_Target = Add-DiskToVirtualMachine -VMConfig $vm_Target -Disks $disks
+	$disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $targetRG -ResourceGroupTarget $sourceRG -SnapshotsInfo $snapshotInfo
 
-# ---------------------------------------------------------------------------------
-# Add the NICs to the VM
-# ---------------------------------------------------------------------------------
+	# ---------------------------------------------------------------------------------
+	# Add the Disks to the VM
+	# ---------------------------------------------------------------------------------
 
-$vm_Target = Add-NICsToVirtualMAchine -vm_source $vm_source -vm_target $vm_Target
+	$vm_Target = Add-DiskToVirtualMachine -VMConfig $vm_Target -Disks $disks
 
-# ---------------------------------------------------------------------------------
-# Recreate the VM
-# ---------------------------------------------------------------------------------
-New-AzVM -ResourceGroupName $rg_Source_Name -Location $vm_source.Location -VM $vm_Target -AsJob
-	
+	# ---------------------------------------------------------------------------------
+	# Add the NICs to the VM
+	# ---------------------------------------------------------------------------------
+
+	$vm_Target = Add-NICsToVirtualMAchine -vm_source $vm_source -vm_target $vm_Target
+
+	# ---------------------------------------------------------------------------------
+	# Recreate the VM
+	# ---------------------------------------------------------------------------------
+	New-AzVM -ResourceGroupName $sourceRG -Location $vm_source.Location -VM $vm_Target #-AsJob
+} catch {
+	Write-Host -ForegroundColor Red -BackgroundColor White "Error: $ErrorMessage"
+}	
