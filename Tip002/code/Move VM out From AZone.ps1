@@ -4,9 +4,6 @@
 	#--------------------------------------------------------------
 	# parameter is always mandatory
 	[Parameter(Mandatory=$True)]
-	[int] $stepIndex,
-
-	[Parameter(Mandatory=$True)]
 	[string] $subscriptionName,
 
 	[Parameter(Mandatory=$True)]
