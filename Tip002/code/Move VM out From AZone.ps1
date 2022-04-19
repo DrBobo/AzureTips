@@ -192,10 +192,10 @@ Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $Virtua
 # ------------------------------------------------------
 # Running in the right Subscription?
 # ------------------------------------------------------
-
+Write-Host -ForegroundColor Green  "Setting default subscription!"
 $subscription = Get-AzSubscription -SubscriptionName $SubscriptionName
 if (-Not $Subscription) {
-    Write-Host -ForegroundColor Red -BackgroundColor White "Sorry, it seems you are not connected to Azure or don't have access to the subscription. Please use Connect-AzAccount to connect."
+    Write-Host -ForegroundColor Red  "Sorry, it seems you are not connected to Azure or don't have access to the subscription. Please use Connect-AzAccount to connect."
     exit
 }
 
@@ -213,6 +213,7 @@ try {
 }
 
 if ($null -eq $rt_Target) {
+	Write-Host -ForegroundColor Green  "Creating target resource group!"
 	$rt_Target = New-AzResourceGroup -Name $targetRG -Location $location
 }
 
@@ -221,7 +222,7 @@ try {
 	# ----------------------------------------------------------------
 	# Get the details from the VM to be moved out of Availability Zone
 	# ----------------------------------------------------------------
-
+	Write-Host -ForegroundColor Green  "Getting Virtual Machine Configuration!"
 	$vm_source = Get-AzVM -ResourceGroupName $sourceRG -Name $sourceVM
 
 	# ----------------------------------------------------------------------------------
@@ -234,7 +235,7 @@ try {
 	#
 	# Return: $snapshotInfo - list of the Azure Snapshot Resource names
 	# ----------------------------------------------------------------------------------
-
+	Write-Host -ForegroundColor Green  "Creating Virtual Machine disks snapshots!"
 	$snapshotInfo = Write-VMDisksSnapshot -ResourceGroup $targetRG -VirtualMachine $vm_source
 
 	# -------------------------------------------------------------------
@@ -242,8 +243,9 @@ try {
 	#
 	# Note: All disks marked >Delete with VM< will be also removed
 	# -------------------------------------------------------------------
+	Write-Host -ForegroundColor Green  "Deleting Virtual Machine!"
 	Remove-AzVM -ResourceGroupName $sourceRG -Name $sourceVM -Force   
-
+	Write-Host -ForegroundColor Green  "Virtual Machine deleted!"
 	# -------------------------------------------------------------------
 	# Delete other resources...
 	#
@@ -252,9 +254,9 @@ try {
 
 	# ... your >Delete other resources...< script is going to be... here!
 	# e.g. Remove old disks...
-
+	Write-Host -ForegroundColor Green  "Deleting all Virtual Machine disks!"
 	Remove-AllVirualMachineDisks -ResourceGroup $sourceRG -VirtualMachine $vm_source
-
+	Write-Host -ForegroundColor Green  "All Virtual Machine disks deleted!"
 	# ----------------------------------------------------------------------------------------------
 	# CREATE Virtual Machine (VM) 
 	#
@@ -263,30 +265,38 @@ try {
 	# ----------------------------------------------------------------------------------------------
 
 	#Initialize virtual machine configuration
+	Write-Host -ForegroundColor Green  "Creating new Virtual Machine configuration from old Virtual Machine settings!"
 	$vm_Target = New-AzVMConfig -VMName $vm_Source.Name -VMSize $vm_Source.HardwareProfile.VmSize -LicenseType $vm_Source.LicenseType
 
 	# -------------------------------------------------------------------
 	# Create new disks from the snapshots 
 	# -------------------------------------------------------------------
-
+	Write-Host -ForegroundColor Green  "Creating Managed Disks out of snapshots!"
 	$disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $targetRG -ResourceGroupTarget $sourceRG -SnapshotsInfo $snapshotInfo
 
 	# ---------------------------------------------------------------------------------
 	# Add the Disks to the VM
 	# ---------------------------------------------------------------------------------
-
+	Write-Host -ForegroundColor Green  "Adding disks to the new Virtual Machine configuration!"
 	$vm_Target = Add-DiskToVirtualMachine -VMConfig $vm_Target -Disks $disks
 
 	# ---------------------------------------------------------------------------------
 	# Add the NICs to the VM
 	# ---------------------------------------------------------------------------------
-
+	Write-Host -ForegroundColor Green  "Adding NICs to the new Virtual Machine configuration!"
 	$vm_Target = Add-NICsToVirtualMAchine -vm_source $vm_source -vm_target $vm_Target
 
 	# ---------------------------------------------------------------------------------
 	# Recreate the VM
 	# ---------------------------------------------------------------------------------
-	New-AzVM -ResourceGroupName $sourceRG -Location $vm_source.Location -VM $vm_Target #-AsJob
+	Write-Host -ForegroundColor Green  "Creating new Virtual Machine!"
+	if ($null -eq $vm_source.LicenseType) {
+		New-AzVM -ResourceGroupName $sourceRG -Location $vm_source.Location -VM $vm_Target -LicenseType $vm_source.LicenseType #-AsJob
+	} else {
+		New-AzVM -ResourceGroupName $sourceRG -Location $vm_source.Location -VM $vm_Target #-AsJob		
+	}
+	Write-Host -ForegroundColor Green  "New Virtual Machine successfully created and started!"
+
 } catch {
-	Write-Host -ForegroundColor Red -BackgroundColor White "Error: $ErrorMessage"
+	Write-Host -ForegroundColor Red -BackgroundColor White  $PSItem.Exception.Message
 }	
