@@ -183,12 +183,6 @@ Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $Virtua
 	}
 }
 
-# --------------------------------------------------------------------------
-#                     Remove VM from Availability Zone
-#
-#     BEFORE EXECUTING THIS SCRIPT PLEASE BACKUP YOUR VIRTUAL MACHINE
-# --------------------------------------------------------------------------
-
 # ------------------------------------------------------
 # Running in the right Subscription?
 # ------------------------------------------------------
@@ -222,6 +216,16 @@ try {
 	# ----------------------------------------------------------------
 	# Checks...		
 	# ----------------------------------------------------------------
+	
+	Write-Host -ForegroundColor Red  "This script will recreate the VM!"
+	Write-Host -ForegroundColor Red  "It is receomended to first backup your VM!"
+	Write-Host -ForegroundColor Green  "Are you sure you want to continue? (y/n)"
+	$answer = Read-Host  -Force
+	if ($answer -ne "y") {
+		Write-Host -ForegroundColor Green  "Exiting..."
+		exit
+	}
+	
 	if($sourceRG -eq $targetRG) {
 		Write-Host -ForegroundColor Red  "Source and target resource groups are the same. Please use different resource groups."
 		exit
