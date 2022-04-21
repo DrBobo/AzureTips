@@ -22,11 +22,11 @@ If by any chance you get into a situation where you want to move VM out of Avail
 
 
 ## 💪 A possible solution
-The steps I'm describing here are also reflected in the powershell script and provided as separated PowerShell functions. Although my powershell script can run as a whole, I would not recommend it. My goal is to explain to you the steps you need to take if you want to move VM out of Availability Zone and how you can do it using the PowerShell. It is very important that you understand the whole script and whether it fully or only partially reflects to your landscape. 
+The steps I'm describing here are also reflected in the powershell script and provided as separated PowerShell functions. My goal is to explain to you the steps you need to take if you want to move VM out of Availability Zone and how you can do it using the PowerShell. It is very important that you understand the whole script and whether it fully or only partially reflects to your landscape. 
 Check the [list](https://docs.microsoft.com/en-us/azure/availability-zones/az-region) of  Azure services that support Availability Zones!
 
 Step 1.
-Get the details from the VM to be moved out of Availability Zone
+Get the details from the VM to be moved out of Availability Zone, and create the ARM Template from that VM.
 
 Step 2. 
 Move all VM disks from Availability Zones! We will first make a snapshot of all disks on the VM! The disk snapshots are created in Target ResourceGroup. If you want to clean Target ResourceGroup later you have to do it yourself. Currently script is not doing that!
@@ -35,8 +35,12 @@ Step 3.
 Creating new Managed Disks from the snapshots and copying all orginal disk settings back to thew newly created Managed Disks.
 
 Step 4.
-Create new VM, and then attach old NIC resource(s) and attach all new disks!
+Create new VM out of modified ARM Template and "attaching" NIC and the disks!
 
 📢Note: The current script implementation doesn't copy all VM settings from old VM to the new VM!
 
 📢Note: By creating a new VM, the VM gets a new VM ID! Some software vendors use the VM ID as the HW key to generate software licenses. Check your software vendor documentation and follow the instructions to reactivate the licenses.
+
+## 🚀 Example
+
+.\'Move VM out From AZone.ps1' -subscriptionName 'Subscription Name' -location 'Azure Region Name' -sourceRG 'Source Resource Group' -targetRG 'Target Resource Group' -sourceVM 'The Virtual Machine Name'
