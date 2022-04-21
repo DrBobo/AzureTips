@@ -172,6 +172,7 @@ Function Add-NICsToVirtualMachine ([object] $vm_source, [object] $vm_target)
 Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $VirtualMachine) 
 {
 
+	$VirtualMachine.StorageProfile.OsDisk
 	Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $VirtualMachine.StorageProfile.OsDisk.Name -Force;
 
 	$disks = $VirtualMachine.StorageProfile.DataDisks
@@ -180,7 +181,6 @@ Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $Virtua
 			Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $disk.Name -Force;
 		}
 	}
-
 }
 
 # --------------------------------------------------------------------------
@@ -220,11 +220,26 @@ if ($null -eq $rt_Target) {
 try {
 
 	# ----------------------------------------------------------------
+	# Checks...		
+	# ----------------------------------------------------------------
+	if($sourceRG -eq $targetRG) {
+		Write-Host -ForegroundColor Red  "Source and target resource groups are the same. Please use different resource groups."
+		exit
+	}
+
+	# ----------------------------------------------------------------
 	# Get the details from the VM to be moved out of Availability Zone
 	# ----------------------------------------------------------------
 	Write-Host -ForegroundColor Green  "Getting Virtual Machine Configuration!"
 	$vm_source = Get-AzVM -ResourceGroupName $sourceRG -Name $sourceVM
 
+	Write-Host -ForegroundColor Green  "Create the ARM Template out of Virtual Machine" $vm_source.Name "!"
+	
+	$pathARM = ".\" + $vm_source.Name + ".json"
+	Export-AzResourceGroup -ResourceGroupName "rg-testvmAZ" -SkipAllParameterization -Resource @($vm_source.Id) -Path $pathARM -Force
+	
+	Write-Host -ForegroundColor Green  "The ARM Template path for the original Virtual Machine" $vm_source.Name "path is" $pathARM 
+	
 	# ----------------------------------------------------------------------------------
 	# Create all VM disks snapshot in target Resouce Group ($targetRG)
 	# 
@@ -243,9 +258,9 @@ try {
 	#
 	# Note: All disks marked >Delete with VM< will be also removed
 	# -------------------------------------------------------------------
-	Write-Host -ForegroundColor Green  "Deleting Virtual Machine!"
+	#Write-Host -ForegroundColor Green  "Deleting Virtual Machine!"
 	Remove-AzVM -ResourceGroupName $sourceRG -Name $sourceVM -Force   
-	Write-Host -ForegroundColor Green  "Virtual Machine deleted!"
+	#Write-Host -ForegroundColor Green  "Virtual Machine deleted!"
 	# -------------------------------------------------------------------
 	# Delete other resources...
 	#
@@ -257,16 +272,6 @@ try {
 	Write-Host -ForegroundColor Green  "Deleting all Virtual Machine disks!"
 	Remove-AllVirualMachineDisks -ResourceGroup $sourceRG -VirtualMachine $vm_source
 	Write-Host -ForegroundColor Green  "All Virtual Machine disks deleted!"
-	# ----------------------------------------------------------------------------------------------
-	# CREATE Virtual Machine (VM) 
-	#
-	# Note: In this example not all VM properties are copied over from old to the new VM!
-	# Please implement an additional mapping if necessery
-	# ----------------------------------------------------------------------------------------------
-
-	#Initialize virtual machine configuration
-	Write-Host -ForegroundColor Green  "Creating new Virtual Machine configuration from old Virtual Machine settings!"
-	$vm_Target = New-AzVMConfig -VMName $vm_Source.Name -VMSize $vm_Source.HardwareProfile.VmSize -LicenseType $vm_Source.LicenseType
 
 	# -------------------------------------------------------------------
 	# Create new disks from the snapshots 
@@ -286,17 +291,34 @@ try {
 	Write-Host -ForegroundColor Green  "Adding NICs to the new Virtual Machine configuration!"
 	$vm_Target = Add-NICsToVirtualMAchine -vm_source $vm_source -vm_target $vm_Target
 
-	# ---------------------------------------------------------------------------------
-	# Recreate the VM
-	# ---------------------------------------------------------------------------------
-	Write-Host -ForegroundColor Green  "Creating new Virtual Machine!"
-	if ($null -eq $vm_source.LicenseType) {
-		New-AzVM -ResourceGroupName $sourceRG -Location $vm_source.Location -VM $vm_Target -LicenseType $vm_source.LicenseType #-AsJob
-	} else {
-		New-AzVM -ResourceGroupName $sourceRG -Location $vm_source.Location -VM $vm_Target #-AsJob		
-	}
-	Write-Host -ForegroundColor Green  "New Virtual Machine successfully created and started!"
+	# ----------------------------------------------------------------------------------------------
+	# CREATE Virtual Machine (VM) 
+	#
+	# Note: In this example not all VM properties are copied over from old to the new VM!
+	# Please implement an additional mapping if necessery
+	# ----------------------------------------------------------------------------------------------
+
+	Write-Host -ForegroundColor Green  "Starting with creating new Virtual Machine" $vm_source.Name "steps..."
+	
+	Write-Host -ForegroundColor Green  "Prepare the ARM Template for new Virtual Machine" $vm_source.Name"!"
+
+	$templateVM = Get-Content $pathARM -Raw | ConvertFrom-Json  -Depth 20
+	$templateVM.resources.Get(0).Zones = $null
+	$templateVM.resources.Get(0).properties.osProfile = $null
+	$templateVM.resources.Get(0).properties.storageProfile.osDisk.createOption = "Attach"
+	$templateVM.resources.Get(0).properties.storageProfile.imageReference = $null
+	
+	$pathARM = ".\" + $vm_source.Name + "_New.json"
+	ConvertTo-Json -InputObject $templateVM -Depth 10 | Out-File $pathARM -Encoding UTF8 -Force
+	Write-Host -ForegroundColor Green  "The ARM Template path for the NEW Virtual Machine" $vm_source.Name" path is" $pathARM 
+
+	Write-Host -ForegroundColor Green  "Deploying ARM Template for new Virtual Machine" $vm_source.Name"!"
+
+	$deploymentName = "Deployment_" + $vm_source.Name
+	New-AzResourceGroupDeployment -Name $deploymentName -ResourceGroupName $sourceRG -TemplateFile $pathARM 
+	Write-Host -ForegroundColor Green  "The Virtual Machine" $vm_source.Name "successfully created and started!"
 
 } catch {
 	Write-Host -ForegroundColor Red -BackgroundColor White  $PSItem.Exception.Message
 }	
+
