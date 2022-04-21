@@ -307,7 +307,10 @@ try {
 	Write-Host -ForegroundColor Green  "Prepare the ARM Template for new Virtual Machine" $vm_source.Name"!"
 
 	$templateVM = Get-Content $pathARM -Raw | ConvertFrom-Json  -Depth 20
-	$templateVM.resources.Get(0).Zones = $null
+
+	if ($null -eq $templateVM.resources.Contains("Zones")) {
+		$templateVM.resources.Get(0).Zones = $null
+	}
 	$templateVM.resources.Get(0).properties.osProfile = $null
 	$templateVM.resources.Get(0).properties.storageProfile.osDisk.createOption = "Attach"
 	$templateVM.resources.Get(0).properties.storageProfile.imageReference = $null
