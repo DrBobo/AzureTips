@@ -16,7 +16,7 @@
 	[string] $targetRG,
 	 
 	[Parameter(Mandatory=$True)]
-	[string] $sourceVM	
+	[string] $sourceVM
 )
 
 # ------------------------------------------------------
@@ -92,7 +92,7 @@ Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine)
 	return $snapshotsInfo
 }
 
-Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnapshot, [string] $ResourceGroupTarget, [string[]] $SnapshotsInfo)
+Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnapshot, [string] $ResourceGroupTarget, [string[]] $SnapshotsInfo) 
 {
 	# ---------------------------------------------------------------------------------
 	# Create Managed Disk from Snapshot
@@ -112,6 +112,7 @@ Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnap
 		} else {
 			$diskConfig = New-AzDiskConfig -SkuName $snapshot.Tags["DiskType"] -Location $Location -CreateOption Copy -SourceResourceId $snapshot.Id `
 				-DiskSizeGB $snapshot.Tags["DiskSize"]  
+		
 		}
 
 		$disks += New-AzDisk -Disk $diskConfig -ResourceGroupName $ResourceGroupTarget -DiskName $snapshot.Tags["DiskName"]
@@ -124,51 +125,6 @@ Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnap
 
 	return $disks
 }
-
-Function Add-DiskToVirtualMachine([object] $VMConfig, [object[]] $Disks) 
-{
-	# ---------------------------------------------------------------------------------
-	# Add Managed Disks to Virtual Machine
-	# ---------------------------------------------------------------------------------
-	$index = 0
-	if ($Disks.Count -gt 0) {
-		foreach ($disk in $Disks) {
-			if($index -eq 0) {
-				if ($disk.OsType -eq "Windows") {
-					$vm_Target = Set-AzVMOSDisk -VM $vm_Target -Name $disk.Name -DiskSizeInGB $disk.DiskSizeGB -ManagedDiskId $disk.Id -CreateOption Attach -Windows -Caching $disk.Tags["DiskCaching"] 
-				} else {
-					$vm_Target = Set-AzVMOSDisk -VM $vm_Target -Name $disk.Name -DiskSizeInGB $disk.DiskSizeGB -ManagedDiskId $disk.Id -CreateOption Attach Linux -Caching $disk.Tags["DiskCaching"] 
-				}
-			}
-			else {
-				if ($disk.Tags["DiskWAEnabled"] -eq "False") {
-					$vm_Target = Add-AzVMDataDisk -VM $vm_Target -Name $disk.Name -DiskSizeInGB $disk.DiskSizeGB -Lun $disk.Tags["DiskLun"] -ManagedDiskId $disk.Id -CreateOption Attach -Caching $disk.Tags["DiskCaching"] 
-				} else {
-					$vm_Target = Add-AzVMDataDisk -VM $vm_Target -Name $disk.Name -DiskSizeInGB $disk.DiskSizeGB -Lun $disk.Tags["DiskLun"] -ManagedDiskId $disk.Id -CreateOption Attach -Caching $disk.Tags["DiskCaching"] -WriteAccelerator 
-				}
-
-			}
-			$index++
-		}
-	}
-	return $VMConfig
-}
-
-Function Add-NICsToVirtualMachine ([object] $vm_source, [object] $vm_target) 
-{
-	# ---------------------------------------------------------------------------------
-	# Add the NICs to the VM
-	# ---------------------------------------------------------------------------------
-
-	$nics = $vm_source.NetworkProfile.NetworkInterfaces
-
-	foreach ($nic in $nics) {
-		$vm_Target = Add-AzVMNetworkInterface -VM $vm_Target -Id $nic.Id
-	}
-
-	return $vm_Target
-}
-
 Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $VirtualMachine) 
 {
 
@@ -217,6 +173,11 @@ try {
 	# Checks...		
 	# ----------------------------------------------------------------
 	
+	if($sourceRG -eq $targetRG) {
+		Write-Host -ForegroundColor Red  "Source and target resource groups are the same. Please use different resource groups."
+		exit
+	}
+
 	Write-Host -ForegroundColor Red  "This script will recreate the VM!"
 	Write-Host -ForegroundColor Red  "It is receomended to first backup your VM!"
 	Write-Host -ForegroundColor Green  "Are you sure you want to continue? (y/n)"
@@ -225,14 +186,9 @@ try {
 		Write-Host -ForegroundColor Green  "Exiting..."
 		exit
 	}
-	
-	if($sourceRG -eq $targetRG) {
-		Write-Host -ForegroundColor Red  "Source and target resource groups are the same. Please use different resource groups."
-		exit
-	}
 
 	# ----------------------------------------------------------------
-	# Get the details from the VM to be moved out of Availability Zone
+	# Get the details from the VM to be recreated
 	# ----------------------------------------------------------------
 	Write-Host -ForegroundColor Green  "Getting Virtual Machine Configuration!"
 	$vm_source = Get-AzVM -ResourceGroupName $sourceRG -Name $sourceVM
@@ -240,7 +196,7 @@ try {
 	Write-Host -ForegroundColor Green  "Create the ARM Template out of Virtual Machine" $vm_source.Name "!"
 	
 	$pathARM = ".\" + $vm_source.Name + ".json"
-	Export-AzResourceGroup -ResourceGroupName "rg-testvmAZ" -SkipAllParameterization -Resource @($vm_source.Id) -Path $pathARM -Force
+	Export-AzResourceGroup -ResourceGroupName  $sourceRG -SkipAllParameterization -Resource @($vm_source.Id) -Path $pathARM -Force 
 	
 	Write-Host -ForegroundColor Green  "The ARM Template path for the original Virtual Machine" $vm_source.Name "path is" $pathARM 
 	
@@ -281,19 +237,7 @@ try {
 	# Create new disks from the snapshots 
 	# -------------------------------------------------------------------
 	Write-Host -ForegroundColor Green  "Creating Managed Disks out of snapshots!"
-	$disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $targetRG -ResourceGroupTarget $sourceRG -SnapshotsInfo $snapshotInfo
-
-	# ---------------------------------------------------------------------------------
-	# Add the Disks to the VM
-	# ---------------------------------------------------------------------------------
-	Write-Host -ForegroundColor Green  "Adding disks to the new Virtual Machine configuration!"
-	$vm_Target = Add-DiskToVirtualMachine -VMConfig $vm_Target -Disks $disks
-
-	# ---------------------------------------------------------------------------------
-	# Add the NICs to the VM
-	# ---------------------------------------------------------------------------------
-	Write-Host -ForegroundColor Green  "Adding NICs to the new Virtual Machine configuration!"
-	$vm_Target = Add-NICsToVirtualMAchine -vm_source $vm_source -vm_target $vm_Target
+	$disks = Write-DiskFromSnapshot -Location $location -ResourceGroupSnapshot $targetRG -ResourceGroupTarget $sourceRG -SnapshotsInfo $snapshotInfo -ZoneVM $zoneVM
 
 	# ----------------------------------------------------------------------------------------------
 	# CREATE Virtual Machine (VM) 
@@ -308,13 +252,20 @@ try {
 
 	$templateVM = Get-Content $pathARM -Raw | ConvertFrom-Json  -Depth 20
 
-	if ($null -eq $templateVM.resources.Contains("Zones")) {
+	try {
+		# ----------------------------------------------------------------------------------------------
+		# Availability Zone - Remove
+		# ----------------------------------------------------------------------------------------------
 		$templateVM.resources.Get(0).Zones = $null
-	}
-	$templateVM.resources.Get(0).properties.osProfile = $null
-	$templateVM.resources.Get(0).properties.storageProfile.osDisk.createOption = "Attach"
-	$templateVM.resources.Get(0).properties.storageProfile.imageReference = $null
-	
+
+		# ----------------------------------------------------------------------------------------------
+		# Modify original VM template 
+		# ----------------------------------------------------------------------------------------------
+		$templateVM.resources.Get(0).properties.osProfile = $null
+		$templateVM.resources.Get(0).properties.storageProfile.osDisk.createOption = "Attach"
+		$templateVM.resources.Get(0).properties.storageProfile.imageReference = $null
+	} catch {}
+
 	$pathARM = ".\" + $vm_source.Name + "_New.json"
 	ConvertTo-Json -InputObject $templateVM -Depth 10 | Out-File $pathARM -Encoding UTF8 -Force
 	Write-Host -ForegroundColor Green  "The ARM Template path for the NEW Virtual Machine" $vm_source.Name" path is" $pathARM 
