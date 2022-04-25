@@ -43,4 +43,4 @@ Create new VM out of modified ARM Template and "attaching" NIC and the disks!
 
 ## 🚀 Example
 
-'Move VM out From AZone.ps1' -subscriptionName 'Subscription Name' -location 'Azure Region Name' -sourceRG 'Source Resource Group' -targetRG 'Target Resource Group' -sourceVM 'The Virtual Machine Name'
+Move-VM-AZone.ps1 -subscriptionName 'Subscription Name' -location 'Azure Region Name' -sourceRG 'Source Resource Group' -targetRG 'Target Resource Group' -sourceVM 'The Virtual Machine Name'
