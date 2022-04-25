@@ -68,7 +68,7 @@ Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine)
 
 	$snapshotsInfo += $snapshotAlias + '_' + $vm.Name + '_OS'
 
-	$snapItem = New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsInfo[0] -ResourceGroupName $ResourceGroup 
+	New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsInfo[0] -ResourceGroupName $ResourceGroup > $null
 
 	# ------------------------------------------------------
 	# DATA Disks
@@ -84,7 +84,7 @@ Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine)
 		$diskInfos = Get-DiskInfos -IsOSDisk $false -SourceDisk $disk
 		$snapshot = New-AzSnapshotConfig -SourceUri $disk.ManagedDisk.Id -Location $location -CreateOption copy -Tag $diskInfos
 
-		$snapItem = New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsInfo[$index] -ResourceGroupName $ResourceGroup 
+		New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsInfo[$index] -ResourceGroupName $ResourceGroup > $null
 
 		$index++
 	}
@@ -198,7 +198,7 @@ try {
 	$pathARM = ".\" + $vm_source.Name + ".json"
 	Export-AzResourceGroup -ResourceGroupName  $sourceRG -SkipAllParameterization -Resource @($vm_source.Id) -Path $pathARM -Force 
 	
-	Write-Host -ForegroundColor Green  "The ARM Template path for the original Virtual Machine" $vm_source.Name "path is" $pathARM 
+	Write-Host -ForegroundColor Green  "The ARM Template path from the original Virtual Machine" $vm_source.Name "path is" $pathARM 
 	
 	# ----------------------------------------------------------------------------------
 	# Create all VM disks snapshot in target Resouce Group ($targetRG)
