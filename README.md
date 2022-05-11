@@ -1,6 +1,6 @@
 # Azure Tips & Tricks Garage 🎓
 
-Content related to the [Microsoft Azure Tips Playlist](Working On It) on Robert's YouTube Channel
+Content related to the [Azure Tips & Tricks Garage Playlist](Working On It) on Robert's YouTube Channel
 
 ## 🚨 Disclaimer
 The opinions expressed herein are my own personal opinions and do not represent my employer’s view in any way.
