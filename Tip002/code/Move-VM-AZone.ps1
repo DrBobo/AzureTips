@@ -29,26 +29,28 @@ Function Get-DiskInfos([Boolean] $IsOSDisk, [object] $SourceDisk ) {
 	# Get VM Disks Infos
 	# ------------------------------------------------------
 
-	$diskname = $disk.Name
+	$diskname = $SourceDisk.Name
 	$diskOSType = "None"
 	$diskLun = "None"
 	$diskIsWAEnabled = "False"
 
 	if ($IsOSDisk) {
-		$diskOSType = $disk.OsType.ToString()
+		$diskOSType = $SourceDisk.OsType.ToString()
 	}
 	else {
-		$diskLun = $disk.Lun.ToString()
+		$diskLun = $SourceDisk.Lun.ToString()
 	}
 
-	if($null -ne $disk.WriteAcceleratorEnabled) { 
-		$diskIsWAEnabled = $disk.WriteAcceleratorEnabled.ToString()
+	if($null -ne $SourceDisk.WriteAcceleratorEnabled) { 
+		$diskIsWAEnabled = $SourceDisk.WriteAcceleratorEnabled.ToString()
 	}
 
-	return @{DiskName = $diskname; DiskOSType = $diskOSType; DiskType = $disk.ManagedDisk.StorageAccountType.ToString(); DiskLun = $diskLun; DiskSize = $disk.DiskSizeGB.ToString(); DiskCaching = $disk.Caching.ToString(); DiskWAEnabled = $diskIsWAEnabled} 
+	return @{DiskName = $diskname; DiskOSType = $diskOSType; DiskType = $SourceDisk.ManagedDisk.StorageAccountType.ToString(); DiskLun = $diskLun; DiskSize = $SourceDisk.DiskSizeGB.ToString(); `
+					DiskCaching = $SourceDisk.Caching.ToString(); DiskWAEnabled = $diskIsWAEnabled; DiskDeleteWithVM = $SourceDisk.DeleteOption.ToString()} 
 }
 	
-Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine) {
+	
+Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine, [int] $targetDiskType, [bool] $force) {
 	
 	# ------------------------------------------------------
 	# Create VM Disks Snapshot
@@ -61,39 +63,46 @@ Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine)
 	# ------------------------------------------------------
 	# OS Disk
 	# ------------------------------------------------------
+	
 	$disk = $VirtualMachine.StorageProfile.OsDisk
 
-	$diskInfos = Get-DiskInfos -IsOSDisk $true -SourceDisk $disk
-    $snapshot = New-AzSnapshotConfig -SourceUri $disk.ManagedDisk.Id -Location $location -CreateOption copy  -Tag $diskInfos
+	if ($force -eq $true -or $disk.DiskDeleteOption -eq "Delete") {
+		$diskInfos = Get-DiskInfos -IsOSDisk $true -SourceDisk $disk
+		$snapshot = New-AzSnapshotConfig -SourceUri $disk.ManagedDisk.Id -Location $location -CreateOption copy  -Tag $diskInfos
 
-	$snapshotsInfo += $snapshotAlias + '_' + $vm.Name + '_OS'
+		$snapshotsName = $snapshotAlias + '_' + $vm.Name + '_OS'
 
-	New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsInfo[0] -ResourceGroupName $ResourceGroup > $null
+		New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsName -ResourceGroupName $ResourceGroup > $null
 
+		$snapshotsInfo += [pscustomobject]@{SnapshotName = $snapshotsName; DiskName = $disk.Name}
+	}
+	
 	# ------------------------------------------------------
 	# DATA Disks
 	# ------------------------------------------------------
+	
 	$disks = $VirtualMachine.StorageProfile.DataDisks | Sort-Object Lun
 
 	$index = 1
 
 	foreach ($disk in $disks) {
 
-		$snapshotsInfo += $snapshotAlias + '_' + $vm.Name + '_DATA_Lun_' + $disk.Lun 
+		if ($force -eq $true -or $disk.DiskDeleteOption -eq "Delete") {
+			$snapshotsName = $snapshotAlias + '_' + $vm.Name + '_DATA_Lun_' + $disk.Lun
 
-		$diskInfos = Get-DiskInfos -IsOSDisk $false -SourceDisk $disk
-		$snapshot = New-AzSnapshotConfig -SourceUri $disk.ManagedDisk.Id -Location $location -CreateOption copy -Tag $diskInfos
+			$diskInfos = Get-DiskInfos -IsOSDisk $false -SourceDisk $disk
+			$snapshot = New-AzSnapshotConfig -SourceUri $disk.ManagedDisk.Id -Location $location -CreateOption copy -Tag $diskInfos
 
-		New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsInfo[$index] -ResourceGroupName $ResourceGroup > $null
+			New-AzSnapshot -Snapshot $snapshot -SnapshotName $snapshotsName -ResourceGroupName $ResourceGroup > $null
 
+			$snapshotsInfo += [pscustomobject]@{SnapshotName = $snapshotsName; DiskName = $disk.Name}
+		}
 		$index++
 	}
-
 	return $snapshotsInfo
 }
 
-Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnapshot, [string] $ResourceGroupTarget, [string[]] $SnapshotsInfo) 
-{
+Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnapshot, [string] $ResourceGroupTarget, [pscustomobject[]] $SnapshotsInfo) {
 	# ---------------------------------------------------------------------------------
 	# Create Managed Disk from Snapshot
 	# ---------------------------------------------------------------------------------
@@ -104,38 +113,28 @@ Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnap
 	
 	$index = 0;
 	foreach ($snapName in $snapshotsInfo) {
-		$snapshot = Get-AzSnapshot -ResourceGroupName $ResourceGroupSnapshot -SnapshotName $snapshotsInfo[$index]
+		$snapshot = Get-AzSnapshot -ResourceGroupName $ResourceGroupSnapshot -SnapshotName $snapName.SnapshotName
 
 		if ($index -eq 0) {
 			$diskConfig = New-AzDiskConfig -SkuName $snapshot.Tags["DiskType"] -Location $Location -CreateOption Copy -SourceResourceId $snapshot.Id `
-				-OsType $snapshot.Tags["DiskOSType"] -DiskSizeGB $snapshot.Tags["DiskSize"]  
+				-OsType $snapshot.Tags["DiskOSType"] -DiskSizeGB $snapshot.Tags["DiskSize"] 
 		} else {
 			$diskConfig = New-AzDiskConfig -SkuName $snapshot.Tags["DiskType"] -Location $Location -CreateOption Copy -SourceResourceId $snapshot.Id `
 				-DiskSizeGB $snapshot.Tags["DiskSize"]  
 		
 		}
 
-		$disks += New-AzDisk -Disk $diskConfig -ResourceGroupName $ResourceGroupTarget -DiskName $snapshot.Tags["DiskName"]
-		$disks[$index].Tags.Add("DiskCaching", $snapshot.Tags["DiskCaching"])
-		$disks[$index].Tags.Add("DiskWAEnabled", $snapshot.Tags["DiskWAEnabled"])
-		$disks[$index].Tags.Add("DiskLun", $snapshot.Tags["DiskLun"])
-		
+		$disks += New-AzDisk -Disk $diskConfig -ResourceGroupName $ResourceGroupTarget -DiskName $snapshot.Tags["DiskName"]		
 		$index++;
 	}
 
 	return $disks
 }
-Function Remove-AllVirualMachineDisks ([string] $ResourceGroup, [object] $VirtualMachine) 
+
+Function Remove-VirualMachineDisks ([string] $ResourceGroup, [pscustomobject[]] $snapshotsInfo) 
 {
-
-	$VirtualMachine.StorageProfile.OsDisk
-	Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $VirtualMachine.StorageProfile.OsDisk.Name -Force;
-
-	$disks = $VirtualMachine.StorageProfile.DataDisks
-	if ($disks.Count -gt 0) {
-		foreach ($disk in $disks) {
-			Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $disk.Name -Force;
-		}
+	foreach ($snapName in $snapshotsInfo) {
+		Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $snapName.DiskName -Force;
 	}
 }
 
@@ -191,17 +190,21 @@ try {
 	# Get the details from the VM to be recreated
 	# ----------------------------------------------------------------
 	Write-Host -ForegroundColor Green  "Getting Virtual Machine Configuration!"
+	
 	$vm_source = Get-AzVM -ResourceGroupName $sourceRG -Name $sourceVM
 
 	Write-Host -ForegroundColor Green  "Create the ARM Template out of Virtual Machine" $vm_source.Name "!"
 	
+	# ----------------------------------------------------------------
+	# Get the ARM Template for the VM to be recreated
+	# ----------------------------------------------------------------
 	$pathARM = ".\" + $vm_source.Name + ".json"
 	Export-AzResourceGroup -ResourceGroupName  $sourceRG -SkipAllParameterization -Resource @($vm_source.Id) -Path $pathARM -Force 
 	
 	Write-Host -ForegroundColor Green  "The ARM Template path from the original Virtual Machine" $vm_source.Name "path is" $pathARM 
 	
 	# ----------------------------------------------------------------------------------
-	# Create all VM disks snapshot in target Resouce Group ($targetRG)
+	# Create VM disks snapshots in target Resouce Group ($targetRG)
 	# 
 	# Note: This func will collect information from the orginal disk settings
 	# and copy them in the disk snapshot tags! 
@@ -211,27 +214,27 @@ try {
 	# Return: $snapshotInfo - list of the Azure Snapshot Resource names
 	# ----------------------------------------------------------------------------------
 	Write-Host -ForegroundColor Green  "Creating Virtual Machine disks snapshots!"
-	$snapshotInfo = Write-VMDisksSnapshot -ResourceGroup $targetRG -VirtualMachine $vm_source
+	$snapshotInfo = Write-VMDisksSnapshot -ResourceGroup $targetRG -VirtualMachine $vm_source -force $true
 
 	# -------------------------------------------------------------------
 	# Delete Source VM 
 	#
 	# Note: All disks marked >Delete with VM< will be also removed
 	# -------------------------------------------------------------------
-	#Write-Host -ForegroundColor Green  "Deleting Virtual Machine!"
+	Write-Host -ForegroundColor Green  "Deleting Virtual Machine!"
 	Remove-AzVM -ResourceGroupName $sourceRG -Name $sourceVM -Force   
-	#Write-Host -ForegroundColor Green  "Virtual Machine deleted!"
+	Write-Host -ForegroundColor Green  "Virtual Machine deleted!"
+	
 	# -------------------------------------------------------------------
 	# Delete other resources...
 	#
-	# Note: Please remove disks (if they are not already removed)
+	# Note: Remove disks for which we created the snapshots
 	# -------------------------------------------------------------------
 
-	# ... your >Delete other resources...< script is going to be... here!
-	# e.g. Remove old disks...
-	Write-Host -ForegroundColor Green  "Deleting all Virtual Machine disks!"
-	Remove-AllVirualMachineDisks -ResourceGroup $sourceRG -VirtualMachine $vm_source
-	Write-Host -ForegroundColor Green  "All Virtual Machine disks deleted!"
+	Write-Host -ForegroundColor Green  "Deleting Virtual Machine OS disk!"
+	Remove-VirualMachineDisks -ResourceGroup $sourceRG -SnapshotsInfo $snapshotInfo
+	Write-Host -ForegroundColor Green  "Virtual Machine OS disk deleted!"
+
 
 	# -------------------------------------------------------------------
 	# Create new disks from the snapshots 
@@ -260,6 +263,10 @@ try {
 
 		# ----------------------------------------------------------------------------------------------
 		# Modify original VM template 
+		#
+		# Original VM ARM Template is prepared for creating a new VM, so we need to 
+		# modify that template to be able to create the new VM but attach the existing disks 
+		# and existing NIC, and not create new ones.
 		# ----------------------------------------------------------------------------------------------
 		$templateVM.resources.Get(0).properties.osProfile = $null
 		$templateVM.resources.Get(0).properties.storageProfile.osDisk.createOption = "Attach"

@@ -264,13 +264,17 @@ try {
 
 	try {
 		# ----------------------------------------------------------------------------------------------
+		# Change the VM Size
+		# ----------------------------------------------------------------------------------------------
+		$templateVM.resources.Get(0).properties.hardwareProfile.vmSize = $targetVMSize
+		
+		# ----------------------------------------------------------------------------------------------
 		# Modify original VM template 
 		#
 		# Original VM ARM Template is prepared for creating a new VM, so we need to 
 		# modify that template to be able to create the new VM but attach the existing disks 
 		# and existing NIC, and not create new ones.
 		# ----------------------------------------------------------------------------------------------
-		$templateVM.resources.Get(0).properties.hardwareProfile.vmSize = $targetVMSize
 		$templateVM.resources.Get(0).properties.osProfile = $null
 		$templateVM.resources.Get(0).properties.storageProfile.osDisk.createOption = "Attach"
 		$templateVM.resources.Get(0).properties.storageProfile.imageReference = $null
