@@ -1,4 +1,4 @@
-# Azure Tips $ Tricks Garage 🎓
+# Azure Tips & Tricks Garage 🎓
 
 Content related to the [Microsoft Azure Tips Playlist](Working On It) on Robert's YouTube Channel
 
