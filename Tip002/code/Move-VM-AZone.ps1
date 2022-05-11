@@ -20,7 +20,7 @@
 )
 
 # ------------------------------------------------------
-# Remove VMs from Availability Zone
+# Functions
 # ------------------------------------------------------
 
 Function Get-DiskInfos([Boolean] $IsOSDisk, [object] $SourceDisk ) {
@@ -48,8 +48,7 @@ Function Get-DiskInfos([Boolean] $IsOSDisk, [object] $SourceDisk ) {
 	return @{DiskName = $diskname; DiskOSType = $diskOSType; DiskType = $SourceDisk.ManagedDisk.StorageAccountType.ToString(); DiskLun = $diskLun; DiskSize = $SourceDisk.DiskSizeGB.ToString(); `
 					DiskCaching = $SourceDisk.Caching.ToString(); DiskWAEnabled = $diskIsWAEnabled; DiskDeleteWithVM = $SourceDisk.DeleteOption.ToString()} 
 }
-	
-	
+		
 Function Write-VMDisksSnapshot ([string]$ResourceGroup, [Object]$VirtualMachine, [int] $targetDiskType, [bool] $force) {
 	
 	# ------------------------------------------------------
@@ -131,12 +130,15 @@ Function Write-DiskFromSnapshot ([string] $Location, [string] $ResourceGroupSnap
 	return $disks
 }
 
-Function Remove-VirualMachineDisks ([string] $ResourceGroup, [pscustomobject[]] $snapshotsInfo) 
-{
+Function Remove-VirualMachineDisks ([string] $ResourceGroup, [pscustomobject[]] $snapshotsInfo) {
 	foreach ($snapName in $snapshotsInfo) {
 		Remove-AzDisk -ResourceGroupName $ResourceGroup -DiskName $snapName.DiskName -Force;
 	}
 }
+
+# ------------------------------------------------------
+# Remove VMs from Availability Zone  
+# ------------------------------------------------------
 
 # ------------------------------------------------------
 # Running in the right Subscription?
