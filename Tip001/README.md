@@ -1,6 +1,6 @@
 
 
-## #001 - Move VM from VM size (with/without) temp disk to the VM Size (with/without)
+## #001 - Move VM from VM size with temp disk to the VM Size without temp disk and vice versa
 
 ## 🚨 Disclaimer
 The opinions expressed herein are my own personal opinions and do not represent my employer’s view in any way.
