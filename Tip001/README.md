@@ -1,6 +1,6 @@
 
 
-## #001 - Move VM out of Availability Zone
+## #001 - Move VM from VM size (with/without) temp disk to the VM Size (with/without)
 
 ## 🚨 Disclaimer
 The opinions expressed herein are my own personal opinions and do not represent my employer’s view in any way.

@@ -15,5 +15,5 @@ In my daily work with customers and partners, I encounter many specific (strange
 
 | Title | Podcast Link |
 | ------------------------------------------- | :---------- |
-| **Azure Virtual Machine** |
+| [Move VM from VM size with temp disk to the VM Size without temp disk and vice versa](https://github.com/DrBobo/AzureTips/tree/main/Tip001) | Working on it! |
 | [Move VM out of Availability Zone](https://github.com/DrBobo/AzureTips/tree/main/Tip002) | Working on it! |
